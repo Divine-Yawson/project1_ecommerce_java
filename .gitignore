@@ -22,3 +22,37 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+# Maven build artifacts
+/target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Eclipse and IntelliJ IDEA
+*.classpath
+*.project
+*.settings/
+.idea/
+*.iml
+
+# macOS system files
+.DS_Store
+
+# Logs
+*.log
+
+# Environment and config
+.env
+
+# OS-specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# VS Code
+.vscode/
+
+# Docker
+*.container
+*.pid
+
+# Misc
+*.swp
