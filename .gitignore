@@ -56,3 +56,124 @@ Desktop.ini
 
 # Misc
 *.swp
+# Created by https://www.gitignore.io/api/java,macos,eclipse,java-webv
+
+### Eclipse ###
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.externalToolBuilders/
+*.launch
+*.pydevproject
+.cproject
+.factorypath
+.buildpath
+.target
+.tern-project
+.texlipse
+.springBeans
+.recommenders/
+.cache-main
+.scala_dependencies
+.worksheet
+
+### Eclipse Patch ###
+.project
+.classpath
+
+### Java ###
+*.class
+*.log
+*.ctxt
+.mtj.tmp/
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+
+### Java-Web ###
+target/
+
+### macOS ###
+*.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+### Terraform ###
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
+*.tfplan
+.terraformrc
+terraform.rc
+
+### Ansible ###
+*.retry
+inventory.ini
+*.vault_pass
+*.pem
+*.key
+*.log
+.molecule/
+
+### Docker ###
+*.tar
+*.pid
+docker-compose.override.yml
+.dockerignore
+volume-data/
+Dockerfile.*
+
+### Kubernetes ###
+*.tgz
+secrets.yaml
+k8s-secrets.yaml
+*.enc.yaml
+kustomization.build.yaml
+.kube/cache/
+.kube/http-cache/
+.kube/config.backup
+
+### VS Code ###
+.vscode/
+
+### Jenkins ###
+.jenkins/
+jenkins_home/
+jobs/
+builds/
+workspace/
+*.jpi
+*.hpi
