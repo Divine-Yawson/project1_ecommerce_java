@@ -13,10 +13,9 @@ data "aws_subnets" "default_subnets" {
     values = [data.aws_vpc.default.id]
   }
 
-  # Optional: filter out unsupported AZs for EKS control plane
   filter {
     name   = "availability-zone"
-    values = ["us-east-1a", "us-east-1b", "us-east-1c"] # Remove unsupported us-east-1e
+    values = ["us-east-1a", "us-east-1b", "us-east-1c"]
   }
 }
 
@@ -51,23 +50,24 @@ resource "aws_iam_role_policy_attachment" "ecr_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# EKS Cluster using Terraform module
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "20.8.4"
 
   cluster_name    = "ecommerce-cluster"
-  cluster_version = "1.29"
+  cluster_version = "1.30"
   vpc_id          = data.aws_vpc.default.id
   subnet_ids      = data.aws_subnets.default_subnets.ids
   enable_cluster_creator_admin_permissions = true
 
   eks_managed_node_groups = {
     default = {
-      desired_size    = 2
-      max_size        = 3
-      min_size        = 1
-      instance_types  = ["t3.medium"]
-      iam_role_arn    = aws_iam_role.eks_node_role.arn
+      desired_size   = 2
+      max_size       = 3
+      min_size       = 1
+      instance_types = ["t3.medium"]
+      iam_role_arn   = aws_iam_role.eks_node_role.arn
     }
   }
 }
@@ -76,6 +76,7 @@ module "eks" {
 resource "aws_security_group" "jenkins_sg" {
   name        = "jenkins-sg"
   description = "Allow SSH and Jenkins access"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     from_port   = 22
@@ -101,65 +102,66 @@ resource "aws_security_group" "jenkins_sg" {
 
 # Jenkins EC2 Instance
 resource "aws_instance" "jenkins_instance" {
-  ami                    = "ami-0c02fb55956c7d316"
+  ami                    = "ami-02457590d33d576c3"
   instance_type          = "t3.medium"
   key_name               = "tonykey"
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
   subnet_id              = data.aws_subnets.default_subnets.ids[0]
 
   user_data = <<-EOF
-             #!/bin/bash
 #!/bin/bash
-exec > /var/log/user-data.log 2>&1
-set -xe
+exec > >(tee /var/log/userdata.log | logger -t userdata) 2>&1
+set -x
 
-# Update packages
-sudo yum update -y
+# Wait for yum lock to be released
+while sudo fuser /var/run/yum.pid >/dev/null 2>&1; do
+  echo "Waiting for yum lock..."
+  sleep 5
+done
 
-# Install Git
-sudo yum install -y git
+yum update -y
+yum install -y git wget unzip docker maven
 
-# Install Docker
-sudo yum install -y docker
+# Install Java 17 (Amazon Linux 2023 way)
+yum install -y java-17-amazon-corretto-devel
+
+# Start and enable Docker
 systemctl enable docker
 systemctl start docker
-
-# Add ec2-user to docker group
 usermod -aG docker ec2-user
 
-# Install Java 11
-amazon-linux-extras enable java-openjdk11
-sudo yum clean metadata
-sudo yum install -y java-11-openjdk
+# Install Jenkins (Amazon Linux 2023 compatible)
+wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
-# Install Maven
-sudo yum install -y maven
+# Wait again if yum is locked
+while sudo fuser /var/run/yum.pid >/dev/null 2>&1; do
+  echo "Waiting for yum lock again..."
+  sleep 5
+done
+
+yum install -y jenkins
+systemctl enable jenkins
+systemctl start jenkins
 
 # Install AWS CLI v2
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-sudo yum install -y unzip
 unzip awscliv2.zip
-sudo ./aws/install
+./aws/install
 
-# Install kubectl
+# Install kubectl (EKS v1.29)
 curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-05-10/bin/linux/amd64/kubectl
-chmod +x ./kubectl
-mv ./kubectl /usr/local/bin/kubectl
+chmod +x kubectl
+mv kubectl /usr/local/bin/
 
 # Install eksctl
 curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
 mv /tmp/eksctl /usr/local/bin
 
-# Install helm
+# Install Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-# Pull Jenkins image
-docker pull jenkins/jenkins:lts
-
-# Run Jenkins container
-docker run -d --name jenkins -p 8080:8080 -p 50000:50000 jenkins/jenkins:lts
-
-  EOF
+EOF
 
   tags = {
     Name = "Jenkins-Server"
@@ -177,4 +179,8 @@ output "ssh_command" {
 
 output "kubeconfig_command" {
   value = "aws eks update-kubeconfig --region us-east-1 --name ${module.eks.cluster_name}"
+}
+
+output "jenkins_initial_password_hint" {
+  value = "ssh -i tonykey.pem ec2-user@${aws_instance.jenkins_instance.public_ip} 'sudo cat /var/lib/jenkins/secrets/initialAdminPassword'"
 }
