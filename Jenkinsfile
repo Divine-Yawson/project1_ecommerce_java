@@ -3,10 +3,8 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'ecommerce-backend'
-        DOCKER_REGISTRY = 'divine2200/ecommerce-backend'
-        // Ensure PATH includes all necessary tool locations
+        DOCKER_REGISTRY = 'divine2200'  // Fixed: this should be your Docker Hub username
         PATH = "/usr/share/maven/bin:/usr/bin:/bin:/usr/local/bin:$PATH"
-        // Explicit Maven home for Docker container
         MAVEN_HOME = '/usr/share/maven'
     }
 
@@ -15,11 +13,11 @@ pipeline {
             steps {
                 sh '''
                     echo "=== Tool Versions ==="
-                    echo "Maven: $(mvn --version || echo 'Maven not found!')"
-                    echo "Git: $(git --version || echo 'Git not found!')"
-                    echo "Docker: $(docker --version || echo 'Docker not found!')"
-                    echo "kubectl: $(kubectl version --client=true --short || echo 'kubectl not found!')"
-                    echo "AWS CLI: $(aws --version || echo 'AWS CLI not found!')"
+                    mvn --version || echo 'Maven not found!'
+                    git --version || echo 'Git not found!'
+                    docker --version || echo 'Docker not found!'
+                    kubectl version --client=true --short || echo 'kubectl not found!'
+                    aws --version || echo 'AWS CLI not found!'
                     echo "PATH: $PATH"
                 '''
             }
@@ -29,7 +27,7 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/dev']],  // or your target branch
+                    branches: [[name: '*/dev']],
                     extensions: [],
                     userRemoteConfigs: [[
                         credentialsId: 'github-creds',
@@ -43,7 +41,6 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        echo "Current directory: $(pwd)"
                         echo "Building with Maven..."
                         mvn clean package -DskipTests
                     '''
@@ -60,7 +57,6 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        // Get the Git commit SHA for tagging
                         COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
                         sh """
                             docker build \
@@ -75,7 +71,7 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'docker-credentials',
+                    credentialsId: 'docker-credentials', // or correct this to your actual Jenkins credential ID
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -90,7 +86,7 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([[
+                withCredentials([[ // Uses IAM user credentials
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials',
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
@@ -98,18 +94,15 @@ pipeline {
                 ]]) {
                     dir('k8s') {
                         sh '''
-                            # Configure kubectl
                             aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
-                            
-                            # Update image tag in deployment
+
+                            # Replace image tag in YAML
                             sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
-                            
-                            # Apply manifests
+
                             kubectl apply -f deployment.yaml
                             kubectl apply -f service.yaml
                             kubectl apply -f ingress.yaml
-                            
-                            # Verify deployment
+
                             kubectl rollout status deployment/ecommerce-backend
                         '''
                     }
@@ -120,7 +113,7 @@ pipeline {
 
     post {
         always {
-            cleanWs()  // Clean workspace after build
+            cleanWs()
         }
         success {
             slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")

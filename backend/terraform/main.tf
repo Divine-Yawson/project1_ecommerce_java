@@ -128,7 +128,7 @@ yum install -y java-17-amazon-corretto-devel
 # Start and enable Docker
 systemctl enable docker
 systemctl start docker
-usermod -aG docker ec2-user
+sudo usermod -aG docker jenkins
 
 # Install Jenkins (Amazon Linux 2023 compatible)
 wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
