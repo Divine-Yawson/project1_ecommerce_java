@@ -116,6 +116,9 @@ set -xe
 # Update packages
 yum update -y
 
+# Install Git
+yum install -y git
+
 # Install Docker
 yum install -y docker
 systemctl enable docker
