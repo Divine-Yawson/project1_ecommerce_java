@@ -1,23 +1,57 @@
 pipeline {
     agent any
-
+    
     environment {
         IMAGE_NAME = 'ecommerce-backend'
-        DOCKER_REGISTRY = 'divine2200/ecommerce-backend'  // Change if you're using ECR
-        PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
+        DOCKER_REGISTRY = 'divine2200/ecommerce-backend'
+        // Ensure PATH includes all necessary tool locations
+        PATH = "/usr/share/maven/bin:/usr/bin:/bin:/usr/local/bin:$PATH"
+        // Explicit Maven home for Docker container
+        MAVEN_HOME = '/usr/share/maven'
     }
 
     stages {
+        stage('Verify Tools') {
+            steps {
+                sh '''
+                    echo "=== Tool Versions ==="
+                    echo "Maven: $(mvn --version || echo 'Maven not found!')"
+                    echo "Git: $(git --version || echo 'Git not found!')"
+                    echo "Docker: $(docker --version || echo 'Docker not found!')"
+                    echo "kubectl: $(kubectl version --client=true --short || echo 'kubectl not found!')"
+                    echo "AWS CLI: $(aws --version || echo 'AWS CLI not found!')"
+                    echo "PATH: $PATH"
+                '''
+            }
+        }
+
         stage('Clone') {
             steps {
-                checkout scm
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/dev']],  // or your target branch
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        credentialsId: 'github-creds',
+                        url: 'https://github.com/Divine-Yawson/project1_ecommerce_java.git'
+                    ]]
+                ])
             }
         }
 
         stage('Build with Maven') {
             steps {
                 dir('backend') {
-                    sh 'mvn clean package -DskipTests'
+                    sh '''
+                        echo "Current directory: $(pwd)"
+                        echo "Building with Maven..."
+                        mvn clean package -DskipTests
+                    '''
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts 'backend/target/*.jar'
                 }
             }
         }
@@ -25,34 +59,74 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('backend') {
-                    sh "docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:latest ."
+                    script {
+                        // Get the Git commit SHA for tagging
+                        COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                        sh """
+                            docker build \
+                                -t $DOCKER_REGISTRY/$IMAGE_NAME:latest \
+                                -t $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA .
+                        """
+                    }
                 }
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
-                    sh "docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest"
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest
+                        docker push $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA
+                    '''
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    sh '''
-                        # Update kubeconfig to access EKS cluster
-                        aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
-
-                        # Deploy Kubernetes manifests
-                        kubectl apply -f k8s/deployment.yaml
-                        kubectl apply -f k8s/service.yaml
-                        kubectl apply -f k8s/ingress.yaml
-                    '''
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    dir('k8s') {
+                        sh '''
+                            # Configure kubectl
+                            aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
+                            
+                            # Update image tag in deployment
+                            sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
+                            
+                            # Apply manifests
+                            kubectl apply -f deployment.yaml
+                            kubectl apply -f service.yaml
+                            kubectl apply -f ingress.yaml
+                            
+                            # Verify deployment
+                            kubectl rollout status deployment/ecommerce-backend
+                        '''
+                    }
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()  // Clean workspace after build
+        }
+        success {
+            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+        }
+        failure {
+            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
         }
     }
 }
