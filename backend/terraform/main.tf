@@ -114,13 +114,13 @@ exec > /var/log/user-data.log 2>&1
 set -xe
 
 # Update packages
-yum update -y
+sudo yum update -y
 
 # Install Git
-yum install -y git
+sudo yum install -y git
 
 # Install Docker
-yum install -y docker
+sudo yum install -y docker
 systemctl enable docker
 systemctl start docker
 
@@ -129,15 +129,15 @@ usermod -aG docker ec2-user
 
 # Install Java 11
 amazon-linux-extras enable java-openjdk11
-yum clean metadata
-yum install -y java-11-openjdk
+sudo yum clean metadata
+sudo yum install -y java-11-openjdk
 
 # Install Maven
-yum install -y maven
+sudo yum install -y maven
 
 # Install AWS CLI v2
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-yum install -y unzip
+sudo yum install -y unzip
 unzip awscliv2.zip
 sudo ./aws/install
 

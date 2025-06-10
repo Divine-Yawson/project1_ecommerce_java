@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = 'ecommerce-backend'
         DOCKER_REGISTRY = 'divine2200/ecommerce-backend'  // Change if you're using ECR
+        PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
     }
 
     stages {
