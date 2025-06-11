@@ -111,14 +111,31 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs()
+    always {
+        script {
+            try {
+                cleanWs()
+            } catch (e) {
+                echo "Workspace cleanup failed: ${e.getMessage()}"
+            }
         }
-        success {
-            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+    }
+    success {
+        script {
+            try {
+                slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (Commit: ${env.COMMIT_SHA})")
+            } catch (e) {
+                echo "Slack notification failed: ${e.getMessage()}"
+            }
         }
-        failure {
-            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+    }
+    failure {
+        script {
+            try {
+                slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+            } catch (e) {
+                echo "Slack notification failed: ${e.getMessage()}"
+            }
         }
     }
 }
