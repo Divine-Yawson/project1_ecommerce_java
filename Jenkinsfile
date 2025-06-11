@@ -140,14 +140,27 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs()
-        }
-        success {
-            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
-        }
-        failure {
-            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+       post {
+    always {
+        cleanWs(cleanWhenAborted: true, cleanWhenFailure: true, cleanWhenNotBuilt: true, cleanWhenUnstable: true)
+    }
+    success {
+        script {
+            try {
+                slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+            } catch (Exception e) {
+                echo "Slack notification failed: ${e.getMessage()}"
+            }
         }
     }
+    failure {
+        script {
+            try {
+                slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+            } catch (Exception e) {
+                echo "Slack notification failed: ${e.getMessage()}"
+            }
+        }
+    }
+}
 }
