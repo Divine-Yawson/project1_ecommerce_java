@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = 'ecommerce-backend'
-        DOCKER_REGISTRY = 'divine2200'  // Docker Hub username only
+        DOCKER_REGISTRY = 'divine2200'
         PATH = "/usr/share/maven/bin:/usr/bin:/bin:/usr/local/bin:$PATH"
         MAVEN_HOME = '/usr/share/maven'
     }
@@ -34,12 +34,6 @@ pipeline {
                         url: 'https://github.com/Divine-Yawson/project1_ecommerce_java.git'
                     ]]
                 ])
-                
-                // Add directory verification
-                sh '''
-                    echo "Repository contents:"
-                    ls -lR
-                '''
             }
         }
 
@@ -95,44 +89,21 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([[ 
+                withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials',
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    script {
-                        // Verify k8s directory exists
-                        def k8sExists = fileExists 'k8s/deployment.yaml'
-                        if (!k8sExists) {
-                            error "Kubernetes manifests not found in k8s/ directory"
-                        }
-                        
-                        dir('k8s') {
-                            sh '''
-                                echo "=== Current k8s directory contents ==="
-                                ls -l
-                                
-                                echo "=== Configuring kubectl ==="
-                                aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
-                                
-                                echo "=== Updating deployment image ==="
-                                sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
-                                
-                                echo "=== Applying manifests ==="
-                                kubectl apply -f deployment.yaml || echo "Deployment failed"
-                                kubectl apply -f service.yaml || echo "Service failed"
-                                kubectl apply -f ingress.yaml || echo "Ingress failed"
-                                
-                                echo "=== Verifying deployment ==="
-                                kubectl rollout status deployment/ecommerce-backend --timeout=3m || {
-                                    echo "Deployment failed"
-                                    kubectl describe deployment ecommerce-backend
-                                    kubectl logs -l app=ecommerce-backend --all-containers
-                                    exit 1
-                                }
-                            '''
-                        }
+                    dir('k8s') {
+                        sh '''
+                            aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
+                            sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
+                            kubectl apply -f deployment.yaml
+                            kubectl apply -f service.yaml
+                            kubectl apply -f ingress.yaml
+                            kubectl rollout status deployment/ecommerce-backend --timeout=3m
+                        '''
                     }
                 }
             }
@@ -140,27 +111,14 @@ pipeline {
     }
 
     post {
-       post {
-    always {
-        cleanWs(cleanWhenAborted: true, cleanWhenFailure: true, cleanWhenNotBuilt: true, cleanWhenUnstable: true)
-    }
-    success {
-        script {
-            try {
-                slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
-            } catch (Exception e) {
-                echo "Slack notification failed: ${e.getMessage()}"
-            }
+        always {
+            cleanWs()
+        }
+        success {
+            slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+        }
+        failure {
+            slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
         }
     }
-    failure {
-        script {
-            try {
-                slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
-            } catch (Exception e) {
-                echo "Slack notification failed: ${e.getMessage()}"
-            }
-        }
-    }
-}
 }
