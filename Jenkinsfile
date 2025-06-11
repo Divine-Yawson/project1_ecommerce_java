@@ -34,6 +34,12 @@ pipeline {
                         url: 'https://github.com/Divine-Yawson/project1_ecommerce_java.git'
                     ]]
                 ])
+                
+                // Add directory verification
+                sh '''
+                    echo "Repository contents:"
+                    ls -lR
+                '''
             }
         }
 
@@ -95,18 +101,38 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    dir('k8s') {
-                        sh '''
-                            aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
-
-                            sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
-
-                            kubectl apply -f deployment.yaml
-                            kubectl apply -f service.yaml
-                            kubectl apply -f ingress.yaml
-
-                            kubectl rollout status deployment/ecommerce-backend
-                        '''
+                    script {
+                        // Verify k8s directory exists
+                        def k8sExists = fileExists 'k8s/deployment.yaml'
+                        if (!k8sExists) {
+                            error "Kubernetes manifests not found in k8s/ directory"
+                        }
+                        
+                        dir('k8s') {
+                            sh '''
+                                echo "=== Current k8s directory contents ==="
+                                ls -l
+                                
+                                echo "=== Configuring kubectl ==="
+                                aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
+                                
+                                echo "=== Updating deployment image ==="
+                                sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
+                                
+                                echo "=== Applying manifests ==="
+                                kubectl apply -f deployment.yaml || echo "Deployment failed"
+                                kubectl apply -f service.yaml || echo "Service failed"
+                                kubectl apply -f ingress.yaml || echo "Ingress failed"
+                                
+                                echo "=== Verifying deployment ==="
+                                kubectl rollout status deployment/ecommerce-backend --timeout=3m || {
+                                    echo "Deployment failed"
+                                    kubectl describe deployment ecommerce-backend
+                                    kubectl logs -l app=ecommerce-backend --all-containers
+                                    exit 1
+                                }
+                            '''
+                        }
                     }
                 }
             }
