@@ -1,8 +1,9 @@
+---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: monitoring
----
+
 apiVersion: helm.cattle.io/v1
 kind: HelmChart
 metadata:
@@ -19,7 +20,7 @@ spec:
     alertmanager:
       persistentVolume:
         enabled: false
----
+
 apiVersion: helm.cattle.io/v1
 kind: HelmChart
 metadata:
@@ -43,3 +44,4 @@ spec:
           url: http://prometheus-server.monitoring.svc.cluster.local
           access: proxy
           isDefault: true
+---
