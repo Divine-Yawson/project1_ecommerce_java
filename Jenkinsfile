@@ -1,141 +1,49 @@
 pipeline {
     agent any
-
     environment {
-        IMAGE_NAME = 'ecommerce-backend'
-        DOCKER_REGISTRY = 'divine2200'
-        PATH = "/usr/share/maven/bin:/usr/bin:/bin:/usr/local/bin:$PATH"
-        MAVEN_HOME = '/usr/share/maven'
+        DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
+        DOCKER_IMAGE = 'divine/ecommerce-backend'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
-
     stages {
-        stage('Verify Tools') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    echo "=== Tool Versions ==="
-                    echo "Maven: $(mvn --version || echo 'Maven not found!')"
-                    echo "Git: $(git --version || echo 'Git not found!')"
-                    echo "Docker: $(docker --version || echo 'Docker not found!')"
-                    echo "kubectl: $(kubectl version --client=true --short || echo 'kubectl not found!')"
-                    echo "AWS CLI: $(aws --version || echo 'AWS CLI not found!')"
-                    echo "PATH: $PATH"
-                '''
+                git branch: 'dev', url: 'https://github.com/Divine-Yawson/project1_ecommerce_java.git'
             }
         }
-
-        stage('Clone') {
+        stage('Build and Push Docker Image') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/dev']],
-                    extensions: [],
-                    userRemoteConfigs: [[
-                        credentialsId: 'github-creds',
-                        url: 'https://github.com/Divine-Yawson/project1_ecommerce_java.git'
-                    ]]
-                ])
+                script {
+                    // Login to Docker Hub
+                    sh 'echo $DOCKER_HUB_CREDENTIALS_PSW | docker login -u $DOCKER_HUB_CREDENTIALS_USR --password-stdin'
+                    // Build the Docker image
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                    // Push the Docker image
+                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    sh "docker push ${DOCKER_IMAGE}:latest"
+                }
             }
         }
-
-        stage('Build with Maven') {
+        stage('Deploy to EKS') {
             steps {
-                dir('backend') {
+                withCredentials([usernamePassword(credentialsId: 'aws-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     sh '''
-                        echo "Current directory: $(pwd)"
-                        echo "Building with Maven..."
-                        mvn clean package -DskipTests
+                        export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                        export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+                        aws eks update-kubeconfig --region us-east-1 --name ecommerce-eks
+                        kubectl apply -f kubernetes/deployment.yaml
+                        kubectl apply -f kubernetes/service.yaml
+                        kubectl apply -f kubernetes/ingress.yaml
                     '''
-                }
-            }
-            post {
-                success {
-                    archiveArtifacts 'backend/target/*.jar'
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                dir('backend') {
-                    script {
-                        def COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                        env.COMMIT_SHA = COMMIT_SHA
-
-                        sh """
-                            docker build \
-                                -t $DOCKER_REGISTRY/$IMAGE_NAME:latest \
-                                -t $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA .
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest
-                        docker push $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    dir('k8s') {
-                        sh '''
-                            aws eks update-kubeconfig --region us-east-1 --name ecommerce-cluster
-                            sed -i "s|image:.*|image: $DOCKER_REGISTRY/$IMAGE_NAME:$COMMIT_SHA|" deployment.yaml
-                            kubectl apply -f deployment.yaml
-                            kubectl apply -f service.yaml
-                            kubectl apply -f ingress.yaml
-                            kubectl rollout status deployment/ecommerce-backend --timeout=3m
-                        '''
-                    }
                 }
             }
         }
     }
-
     post {
-    always {
-        script {
-            try {
-                cleanWs()
-            } catch (e) {
-                echo "Workspace cleanup failed: ${e.getMessage()}"
-            }
-        }
-    }
-    success {
-        script {
-            try {
-                slackSend(color: 'good', message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (Commit: ${env.COMMIT_SHA})")
-            } catch (e) {
-                echo "Slack notification failed: ${e.getMessage()}"
-            }
-        }
-    }
-    failure {
-        script {
-            try {
-                slackSend(color: 'danger', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
-            } catch (e) {
-                echo "Slack notification failed: ${e.getMessage()}"
-            }
+        always {
+            sh 'docker logout'
+            cleanWs()
         }
     }
 }
