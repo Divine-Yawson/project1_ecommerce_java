@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         DOCKER_HUB_CREDENTIALS = credentials('dockerhub-credentials')
-        DOCKER_IMAGE = 'divine/ecommerce-backend'
+        DOCKER_IMAGE = 'divine2200/ecommerce-backend'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
     stages {
