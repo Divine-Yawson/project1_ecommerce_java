@@ -20,7 +20,6 @@ pipeline {
 }
 
                     // Build the Docker image
-                    sh 'sudo usermod -aG docker jenkins'
                     sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                     // Push the Docker image
