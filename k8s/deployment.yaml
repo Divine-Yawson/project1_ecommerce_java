@@ -1,40 +1,30 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ecommerce-backend
-  labels:
-    app: ecommerce-backend
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: ecommerce-backend
-  template:
-    metadata:
-      labels:
-        app: ecommerce-backend
-    spec:
-      containers:
-        - name: ecommerce-backend
-          image: divine2200/ecommerce-backend:latest
-          ports:
-            - containerPort: 8080
-          livenessProbe:
-            httpGet:
-              path: /actuator/health
-              port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /actuator/health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          resources:
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-            requests:
-              memory: "256Mi"
-              cpu: "250m"
+<project>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.cyat</groupId>
+    <artifactId>ecommerce</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+    </parent>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
