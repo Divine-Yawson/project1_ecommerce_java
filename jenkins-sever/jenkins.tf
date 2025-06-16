@@ -81,7 +81,7 @@ yum install -y java-17-amazon-corretto-devel
 # Start and enable Docker
 systemctl enable docker
 systemctl start docker
-usermod -aG docker jenkins
+usermod -aG docker ec2-user
 
 # Install Jenkins
 wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
@@ -89,8 +89,8 @@ rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
 # Wait for yum lock again
 while sudo fuser /var/run/yum.pid >/dev/null 2>&1; do
-  echo "Waiting for yum lock again..."
-  sleep 5
+echo "Waiting for yum lock again..."
+sleep 5
 done
 
 yum install -y jenkins
